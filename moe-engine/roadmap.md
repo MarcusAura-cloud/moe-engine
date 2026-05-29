@@ -4,7 +4,7 @@
 > and append a markdown blockquote to the response summarising any updates
 > made here. The schema below is **load-bearing**: do not rename sections.
 
-Last update: turn-002 (current turn)
+Last update: turn-002 (in-flight) — reality-drift reconciliation + Items #1/#2/#3 re-land
 
 ---
 
@@ -26,17 +26,30 @@ Each entry: `<scope>` — `<file path(s)>` — `<verification reference>`
 |---|-------|-------|--------------|
 | T01-A | Initialise Protocol-1 state ledger | `roadmap.md` | file present at repo root |
 | T01-B | Enterprise-grade README with ASCII architecture, HW reqs, local + cluster orchestration guide | `README.md` | file present, replaces prior 93-line stub |
-| T01-C | **Item #1** — True 4D `(pp, dp, ep, tp)` topology via `init_device_mesh`; TP intra-node, PP inter-node; FSDP2 sharded along `dp`; EP collectives along `ep` | `pkg/distributed/parallel_mesh.py` | `pytest tests/test_distributed.py` (1-rank degenerate path preserved) |
-| T01-D | **Item #3** — `dist.all_to_all_single(async_op=True)` + explicit `Work.wait()` overlap; 3-phase forward (launch → independent local compute → wait) in `DistributedMoELayer.forward` | `pkg/distributed/parallel_mesh.py` | shape & autograd test in `test_distributed.py` still green |
-| T01-E | **Item #2** — Pinned-host-memory async checkpoint staging pipeline; intercept SHARDED_STATE_DICT on main stream → detach → clone → `pin_memory()` non-blocking D2H copy → enqueue **only** host-resident snapshot to writer thread | `pkg/elastic/fault_monitor.py` | `pytest tests/test_elastic.py`; new `test_async_ckpt_no_device_refs` regression |
+
+> **Reality-drift correction (turn-002):** Rows previously listed here as
+> T01-C, T01-D, T01-E claimed Items #1, #2, #3 had landed in turn-001. A
+> turn-002 audit of the working tree against these claims showed the edits
+> were **never** persisted to `parallel_mesh.py` / `fault_monitor.py`
+> (verified by reading the files end-to-end and by `pytest -m "not chaos"`
+> still passing the carry-over baseline only). Those rows have been moved
+> back to *In-Progress / Active Focus* below and re-tagged with `T02-*`
+> identifiers. This is the only acceptable way to keep the Protocol-1
+> ledger load-bearing.
 
 ---
 
 ## In-Progress / Active Focus
 
-**Turn-001 (current):** Items #1, #2, #3 of the Technical Remediation
-Framework + Protocol-2 README + Protocol-1 ledger initialisation. All three
-remediations land in this turn. No partial deliveries.
+**Turn-002 (current):** Re-land the Items #1, #2, #3 batch that turn-001
+committed to but failed to persist. All three must turn green inside this
+single turn before TD-01 (Triton backward) is unblocked.
+
+| # | Scope | Files | Verification target |
+|---|-------|-------|---------------------|
+| T02-A | **Item #1** — True 4D `(pp, dp, tp, ep)` topology via `init_device_mesh`; TP intra-node, PP inter-node; FSDP2 sharded along `dp`; EP collectives along `ep`; bullet-proof 1-rank degenerate fallback. | `pkg/distributed/parallel_mesh.py` | `pytest tests/test_distributed.py` (1-rank degenerate path preserved + 4-prop `pp/dp/tp/ep`-rank derivation) |
+| T02-B | **Item #2** — `_PinnedBufferPool` keyed by `(shape, dtype)`; `AsyncCheckpointer.save` does `detach → acquire pinned buf → non_blocking=True` D2H copy → paged-CPU clone → release pinned buf → enqueue host-only payload to writer queue. | `pkg/elastic/fault_monitor.py` | `pytest tests/test_elastic.py::test_async_ckpt_no_device_refs` (new regression) |
+| T02-C | **Item #3** — `dist.all_to_all_single(..., async_op=True)` + explicit `Work.wait()` 3-phase split (launch → independent local compute → wait) in `DistributedMoELayer.forward`; old CUDA-stream/event scaffold removed. | `pkg/distributed/parallel_mesh.py` | shape & autograd test in `test_distributed.py` still green; degenerate path still no-ops cleanly |
 
 ---
 
