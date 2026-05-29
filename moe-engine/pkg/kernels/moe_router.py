@@ -627,6 +627,25 @@ class MoERouter(torch.nn.Module):
             idx.reshape(-1), minlength=self.num_experts
         ).to(torch.long)
 
+        # ===== TOKEN CONSERVATION INVARIANT (fail-fast guard) =====
+        # Each of N tokens gets K assignments, so total must be N*K.
+        # This is a critical safety check: if violated, training will diverge silently.
+        total_dispatched = dispatch_cnt.sum().item()
+        expected_total = N * self.top_k
+        assert total_dispatched == expected_total, (
+            f"Token loss detected in router: {total_dispatched} routed tokens != "
+            f"expected {expected_total} (N={N}, K={self.top_k}). "
+            f"This indicates a routing bug or silent data corruption."
+        )
+        # Also verify no -1 or NaN expert indices (would indicate failed topk)
+        assert not torch.isnan(idx.float()).any(), (
+            "NaN detected in expert indices; topk kernel may have failed."
+        )
+        assert (idx >= 0).all() and (idx < self.num_experts).all(), (
+            f"Out-of-range expert indices detected; "
+            f"min={idx.min()}, max={idx.max()}, E={self.num_experts}"
+        )
+
         # ------ Telemetry profile ------
         # SRAM footprint for a 64x64 tile of fp32 == 64*64*4 == 16 KiB plus the
         # tokens / gate_w halves, dominated by 64*max(BLOCK_E,BLOCK_H)*4.
