@@ -449,9 +449,10 @@ class DistributedMoELayer(nn.Module):
             device=expert_ids.device, dtype=torch.long,
         )
         boundaries[-1] = E
-        # bucketize: returns the index of the bin into which each value falls.
-        # We want the largest boundary <= expert_id, i.e. right-1.
-        ranks = torch.bucketize(expert_ids, boundaries[1:], right=False)
+        # We want rank r such that boundaries[r] <= expert_id < boundaries[r+1].
+        # Using starts-only (boundaries[1:]) with right=True returns the first
+        # index i s.t. starts[i] > expert_id, which is exactly the owning rank.
+        ranks = torch.bucketize(expert_ids, boundaries[1:], right=True)
         return ranks.clamp_max(ep - 1)
 
     def _exchange_ids(

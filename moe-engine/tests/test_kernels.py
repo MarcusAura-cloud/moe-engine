@@ -60,7 +60,7 @@ def test_backward_tolerance(B, S, H, E, K):
     torch.manual_seed(7)
     N = B * S
     tokens = torch.randn(N, H, dtype=torch.float64, requires_grad=True)
-    gate_w = torch.randn(H, E, dtype=torch.float64, requires_grad=True) / math.sqrt(H)
+    gate_w = (torch.randn(H, E, dtype=torch.float64) / math.sqrt(H)).requires_grad_(True)
 
     # ------- autograd reference: rerun the math inline & let PyTorch diff it.
     def _ref(tk, gw):
