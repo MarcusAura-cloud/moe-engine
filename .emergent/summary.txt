@@ -1,0 +1,450 @@
+<analysis>**original_problem_statement**: Write a fully comprehensive, production-ready, modular monorepo for a Custom Mixture-of-Experts (MoE) Distributed Training Engine named moe-engine. 
+PRODUCT REQUIREMENTS: Hyperscale Pre-training Pipeline with True 4D Parallelism (TP + PP + FSDP2 + EP), Fault-Tolerant Infrastructure, Hardware-Aware Kernel Optimization, and strict state-tracking ledger () to be parsed and updated during *every single turn*.
+
+**User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
+
+**what currently exists?**: The core repository scaffolding exists. A previous fork hallucinated the completion of Protocol 3 Items 1, 2, and 3, so the ledger was reverted to mark these as In-Progress. The immediate goal is to document Technical Debt (TD-01 to TD-04) in the roadmap and proceed with implementing the Real P0 Batch (Items 1, 2, 3 + TD-03) to build the 4D mesh, pinned-host async checkpoint pools, and true async overlap.
+
+**Last working item**: 
+    - Last item agent was working: The agent just started the session, used  to analyze , , and , and used  to propose the execution plan to the user.
+    - Status: BLOCKED / USER VERIFICATION PENDING (Waiting on  response).
+    - Agent Testing Done: N
+    - Which testing method agent to use? Manual testing by  using background processes () due to TorchElastic long execution times.
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**: 
+  - Issue 1 (P0): Implement the Real P0 Batch (Protocol 3 Items 1, 2, and 3) & TD-03 NCCL Watchdogs.
+     - Attempted fixes: The agent has viewed the files but has not written code yet. Preparing to remove  references.
+     - Next debug checklist: 
+       - Update  to expose sub-mesh communication groups (, , , ) with coordinate mapping (, etc.) and a 1-rank degenerate fallback path.
+       - Update  to add  keyed by . Call  before non-blocking D2H copies. Ensure zero live CUDA device tensor references escape.
+       - Refactor  for True Async Overlap using a 3-phase pattern: 1) , 2) Overlap Compute, 3) . Rip out .
+       - Inject  and  for fail-fast communicators (TD-03).
+       - Add  to .
+     - Why fix this issue and what will be achieved with the fix? Achieves True 4D parallelism, zero-allocation checkpoints, network/compute overlap, and environment-level error handling.
+     - Status: NOT STARTED (Awaiting  response)
+     - Is recurring issue? Y (Redoing hallucinated work from previous fork)
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on other issue: Must update  backlog first (Task 1).
+
+  - Issue 2 (P1):  fails/errors out during TorchElastic auto-recovery.
+     - Attempted fixes: None this session.
+     - Next debug checklist: Read detailed pytest exception output (); analyze worker telemetry files.
+     - Why fix this issue and what will be achieved with the fix? Validates hard recovery mechanics under catastrophic failure.
+     - Status: IN PROGRESS (Deferred until P0 Batch is complete)
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on other issue: Issue 1 (Protocol 3 items 1-3).
+
+**In progress Task List**: 
+  - Task 1: UPDATE ROADMAP.MD LEDGER WITH TECHNICAL DEBT (P0)
+     - Where to resume: . MUST be done before writing any code. Add TD-01 (Triton Safety & Custom Backward), TD-02 (Non-Uniform Resharding State-Machine), TD-03 (NCCL Watchdogs), and TD-04 (Dynamic MFU Tracking equation) to the backlog.
+     - What will be achieved with this? Strict adherence to user's auditing and planning protocol.
+     - Status: NOT STARTED (Waiting on  response).
+     - Should Test frontend/backend/both after fix? NA
+     - Blocked on something: None
+
+  - Task 2: Implement P0 Core Batch (P0)
+     - Where to resume: Implement requirements across  and . 
+     - What will be achieved with this? 4D mesh topology, pinned buffer pools, and deterministic 3-phase comm overlap.
+     - Status: NOT STARTED
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on something: Task 1
+
+**Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - P1: TD-01: Triton Kernel Safety & Autograd Backward (). Dynamic pointer masking arrays (128-byte boundary) & custom .
+    - P1: TD-02: Non-Uniform Expert Resharding State-Machine (). Dynamic capacity-factor padding matrix.
+    - P1: TD-04: Dynamic Model FLOPs Utilization (MFU) Telemetry. Implement step-level FLOP tracking equation.
+    
+    Future Tasks:
+    - P2: Run the standard non-chaos regression suite (============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /app
+plugins: mock-3.15.1, timeout-2.4.0, anyio-4.13.0
+collected 25 items / 3 deselected / 22 selected
+
+moe-engine/tests/test_distributed.py .....                               [ 22%]
+moe-engine/tests/test_elastic.py ......                                  [ 50%]
+moe-engine/tests/test_kernels.py .........                               [ 90%]
+moe-engine/tests/test_smoke_e2e.py ..                                    [100%]
+
+=============================== warnings summary ===============================
+moe-engine/tests/test_chaos.py:61
+  /app/moe-engine/tests/test_chaos.py:61: PytestUnknownMarkWarning: Unknown pytest.mark.chaos - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    pytestmark = pytest.mark.chaos
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 22 passed, 3 deselected, 1 warning in 11.44s =================).
+    - P2: Add  opt-in CLI flag in .
+    - P2: Wire chaos suite into GitHub Actions matrix.
+
+**Completed work in this session**
+- Context gathered via  on , , and .
+- Formulated an initial plan and queried the user for approval via .
+
+**Earlier issues found/mentioned but not fixed**
+   - None
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: Scenario A chaos test failure persists ().
+  - Recurrence count: 1
+  - Status: IN PROGRESS (Deferred)
+  Note: This must be addressed only *after* completing the P0 Core Batch implementation.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+PyTorch 2.12+, FSDP2, TorchElastic (), 4D Parallelism (TP, PP, FSDP2, EP), CUDA pinned memory, Asynchronous Checkpointing, Triton custom kernels, NCCL C++ Poisoning Watchdogs.
+
+**key DB schema**
+  - Local NVMe streaming to S3/MinIO (mocked via ).
+
+**changes in tech stack**
+  - None
+
+**All files of reference** 
+  -  (MUST READ/UPDATE FIRST)
+  - 
+  - 
+  - 
+
+**Areas that need refactoring**: 
+  -  (Must rip out  architecture).
+
+**key api endpoints**
+  - NA
+
+**Critical Info for New Agent** 
+  - **MANDATORY PROTOCOL 1:** Before writing or refactoring any code in any turn, you must explicitly read/write to . **Every single turn response MUST begin with a brief markdown blockquote summarizing the updates made to .**
+  - **IMMEDIATE NEXT STEP:** You are waiting for the user's reply to the  tool call. Once the user replies, your **VERY FIRST ACTION** MUST be opening  and adding TD-01, TD-02, TD-03, and TD-04 exactly as detailed in the user requirements, *before* executing any bash or python modifications.
+  - **Testing Strategy Constraints:** Due to the execution time of TorchElastic tests, normal MCP  will timeout. You MUST run the backend tests in the background (e.g., ) and periodically tail .
+
+**documents and test reports created in this job**
+  - None this specific session yet.  exists from early verification.
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ - *User*: Tool result: Question has been sent to the user. Waiting for response (PENDING HUMAN MESSAGE)
+ - *User*: Tool result:  output for  and codebase files. (COMPLETED)
+ - *User*: Strict constraints provided: Mandates immediate roadmap.md update with TD-01..04, details exact implementation for Protocol 3... (IN PROGRESS)
+
+**Project Health Check:**
+  - Broken: Needs actual implementation of Protocol 3 Items 1, 2, and 3 (currently missing from working tree).
+  - Mocked: S3 Storage (via ).
+
+**3rd Party Integrations** 
+  - None required. Uses local PyTorch distributed / Moto.
+
+**Testing status**
+  - Testing agent used after significant changes: NO
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None explicitly created yet (must add  later).
+  - Known regressions: Chaos Scenario A failing (deferred).
+
+**Credentials to test flow:**
+  - None
+
+**What agent forgot to execute**
+  - A previous agent completely forgot Step 1 from the user's instructions: It did not update  with the new Technical Debt items (TD-01 to TD-04) before touching code. The current agent paused to do this, but ensure you follow through with the  update IMMEDIATELY upon the user's response.
+
+**Debugging checklist for current issue**
+    Issue: Implement the Real P0 Batch (Items 1, 2, 3) + TD-03
+
+    Backend files to check:
+    -  (Update with TD-01, TD-02, TD-03, TD-04 FIRST).
+    - 
+    - 
+    - 
+  
+    Bash commands to run (Testing MoE):
+    </analysis>
+
+
+for your reference the original prompt provided to the agent was
+
+
+
+{
+
+You are a Principal AI Infrastructure Engineer specializing in hyperscale deep learning systems and hardware-co-design. Your goal is to write a fully comprehensive, production-ready, modular monorepo for a Custom Mixture-of-Experts (MoE) Distributed Training Engine named . 
+
+name the repo:
+
+A Composed Mixture-of-Experts Engine
+
+
+
+
+
+
+
+The codebase must explicitly bridge the gap between low-level hardware kernel optimization, multi-dimensional distributed parallelism, and resilient infrastructure. Avoid placeholders, mock shortcuts, or TODOs; write out complete, working implementations for every module.
+
+
+
+
+
+
+
+### 1. Repository Structure
+
+
+
+Generate the codebase strictly adhering to the following layout:
+
+
+
+moe-engine/
+
+
+
+├── pkg/
+
+
+
+│   ├── kernels/
+
+
+
+│   │   ├── __init__.py
+
+
+
+│   │   └── moe_router.py         # Triton kernel for sparse gating/routing
+
+
+
+│   ├── distributed/
+
+
+
+│   │   ├── __init__.py
+
+
+
+│   │   └── parallel_mesh.py      # DeviceMesh, FSDP2 (DTensor), and Expert Parallelism
+
+
+
+│   └── elastic/
+
+
+
+│       ├── __init__.py
+
+
+
+│       └── fault_monitor.py      # TorchElastic hooks, Async Checkpointing, Elastic Resharding
+
+
+
+├── tests/
+
+
+
+│   ├── test_kernels.py
+
+
+
+│   └── test_distributed.py
+
+
+
+└── train.py                      # Unified training script execution loop
+
+
+
+
+
+
+
+### 2. High-Level Technical Specifications
+
+
+
+
+
+
+
+Like a FAANG infrastructure or core AI team that an engineer can step in and immediately write code deployed across a cluster of 10,000 GPUs, machine learning becomes a massive distributed systems and hardware co-design problem.
+
+
+
+it should show
+
+
+
+- Hyperscale Pre-training Pipeline with 3D Parallelism (A repository demonstrating the ability to split a massive model (e.g., 30B+ parameters) across hundreds of nodes without running out of memory (OOM) or bottlenecking the network fabric. Implementation of 3D Parallelism: Combining Tensor Parallelism (splitting layers across GPUs within a node), Pipeline Parallelism (splitting layers sequentially across different nodes), and Data Parallelism (using PyTorch FSDP or DeepSpeed ZeRO-3 to shard optimizer states, gradients, and parameters). Custom execution hooks that overlap the backward pass computation with the all-reduce gradient communication over the network fabric. A dashboard or log demonstrating Model Flops Utilization (MFU)—proving the code keeps the GPU Tensor Cores saturated at >50-60% of theoretical hardware maximums.)
+
+
+
+- Fault-Tolerant Infrastructure & Elastic Auto-Recovery ( At a 10,000 GPU scale, hardware failure is a statistical certainty—nodes drop, NVLinks fail, and silent data corruption occurs daily. This project demonstrates an automated infrastructure layer that keeps training alive during an outage. Code that streams massive model states directly to distributed NVMe storage or object stores in the background without freezing the forward/backward training loops. A script simulating a sudden loss of 4 nodes (32 GPUs) mid-training run, showcasing how the cluster automatically evicts the dead nodes, reshards the training states across the remaining nodes, and hot-resumes without human intervention. Kubernetes, Kubeflow Training Operator, Etcd, AWS S3 / MinIO, TorchElastic.)
+
+
+
+- Hardware-Aware Kernel Optimization (Standard high-level APIs introduce immense overhead at scale. This project proves an engineer can drop into low-level code to optimize execution on the silicon itself. A custom written activation or loss kernel (e.g., a highly optimized custom Mixture-of-Experts gating function or a custom attention layer) using Triton or CUDA C++. Detailed memory bandwidth profiles using NVIDIA Nsight Systems or Nsight Compute proving that the kernel minimizes global memory access, avoids shared memory bank conflicts, and maximizes Tensor Core usage compared to a naive PyTorch implementation.)
+
+
+
+
+
+
+
+
+
+
+
+#### Module A: Low-Level Hardware Optimization ()
+
+
+
+- Write a custom Triton kernel optimizing the Top-K routing mechanism for MoE.
+
+
+
+- Implement the forward and backward passes explicitly using .
+
+
+
+- It must accept a token embeddings tensor [Batch, Sequence, Hidden] and a gating weight tensor, compute the top-k expert assignments, and perform sparse, block-level token dispatching.
+
+
+
+- Maximize SRAM reuse, avoid global memory bank conflicts via coalesced access, and map threads explicitly to optimize tensor core execution. Provide a highly optimized PyTorch fallback *only* if the execution context is CPU (for test validation).
+
+
+
+
+
+
+
+#### Module B: Distributed Architecture ()
+
+
+
+- Implement a multi-dimensional distributed topology using PyTorch 2.x/3.x native primitives ().
+
+
+
+- Construct a 2D DeviceMesh separating Data Parallelism (via FSDP2 utilizing per-parameter sharded DTensors) and Expert Parallelism (EP).
+
+
+
+- Build a  that executes non-blocking  collectives to route sparse tokens to their assigned expert GPUs based on the Triton router's output indices.
+
+
+
+- Explicitly implement execution stream hooks to overlap the all-to-all communication phases with the compute phases of adjacent layers.
+
+
+
+
+
+
+
+#### Module C: Resilient Infrastructure ()
+
+
+
+- Build an elastic training harness compatible with TorchElastic.
+
+
+
+- Implement an Asynchronous Checkpointing system that streams sharded state dicts () to persistent storage via non-blocking background I/O threads, eliminating pipeline stalls during saves.
+
+
+
+- Build a cluster state-machine monitor. If a node failure/drop is intercepted, trigger an elastic recovery sequence: evict the failed ranks, recompute the active  slice, reshard the experts evenly across the surviving topology, reload the latest async checkpoint, and hot-resume training.
+
+
+
+
+
+
+
+### 3. Strict Performance Standards & Acceptance Criteria (Definition of Done)
+
+
+
+
+
+
+
+Your implementation will be rejected unless it meets the following strict metrics and mathematical guarantees:
+
+
+
+
+
+
+
+#### Numerical Precision & Invariants
+
+
+
+- **Tolerance Gate:** The Triton kernel forward and backward passes must achieve a strict absolute tolerance of atol < 1e-5 and relative tolerance of rtol < 1e-5 against a double-precision PyTorch autograd reference layer.
+
+
+
+- **Token Conservation:** The sparse dispatch mechanism must guarantee total token conservation: the sum of tokens routed to all experts must precisely equal the total input token count (Batch * Sequence), preventing dropping or ghost-duplication of sequence tokens.
+
+
+
+
+
+
+
+#### Scalability & Compute Efficiency
+
+
+
+- **Model FLOPs Utilization (MFU):** The engine must track and enforce a target MFU of >= 55%. Code must minimize kernel launch overheads and maximize HBM-to-SRAM arithmetic intensity.
+
+
+
+- **Communication Overlap:** The async  communication must happen on a dedicated CUDA stream (), proving mathematically that the forward pass compute of local experts is decoupled from network transit latencies.
+
+
+
+
+
+
+
+#### Deterministic Fault Recovery
+
+
+
+- **Zero-Divergence Resharding:** Upon simulating a hardware drop, the redistribution of experts across the modified  must be mathematically continuous. The state-machine must handle membership updates without leaking memory or throwing shape/strides mismatches during tensor re-allocation.
+
+
+
+
+
+
+
+### 4. Telemetry & Observability Requirements
+
+
+
+The engine must include a structured logging layer that outputs the following real-time telemetry per training step:
+
+
+
+- **Triton Kernel Profiles:** Estimated SRAM occupancy per block and achieved memory bandwidth (GB/s).
+
+
+
+- **Collective Latencies:** Network transit times for NCCL  and FSDP  /  operations.
+
+
+
+- **System Memory:** Peak CUDA memory allocated vs. reserved to catch creeping memory leaks.
+
+
+
+- **Infrastructure:** Async checkpoint commit duration and active cluster node count.
+
+
+
+}
