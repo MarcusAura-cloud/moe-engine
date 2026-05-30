@@ -139,18 +139,15 @@ def main() -> int:
             "generation": generation,
             "ts": time.time(),
         })
-        # Emit a simple, safe textual record (key=value pairs). We avoid
-        # JSON encoding to prevent encoder recursion or side-effects from
-        # complex objects; this is purely for robust telemetry during
-        # debugging runs.
-        parts = []
+        # Emit a JSON line so the test harness can parse it. Convert non-
+        # serializable types to strings for robustness.
+        safe_rec = {}
         for k, v in rec.items():
-            if isinstance(v, (str, int, float, bool)) or v is None:
-                sval = str(v)
+            if isinstance(v, (str, int, float, bool, type(None))):
+                safe_rec[k] = v
             else:
-                sval = "<obj>"
-            parts.append(f"{k}={sval}")
-        tele.write(" ".join(parts) + "\n")
+                safe_rec[k] = str(v)
+        tele.write(json.dumps(safe_rec) + "\n")
         tele.flush()
         try:
             os.fsync(tele.fileno())
@@ -175,10 +172,22 @@ def main() -> int:
     master_port = os.environ.get("MASTER_PORT", "29500")
     # Use env:// by default so torchrun/elastic provides rank/world via env vars.
     init_method = os.environ.get("INIT_METHOD", "env://")
-    timeout = timedelta(seconds=60)
+    
+    # On restart (non-zero elastic restart count), increase timeout and add
+    # substantial synchronization delay to allow all ranks to be re-launched
+    # and ready to bind sockets before attempting PG formation.
+    restart_count = int(os.environ.get("TORCHELASTIC_RESTART_COUNT", "0"))
+    if restart_count > 0:
+        # Longer timeout + delay for restart to ensure robust re-rendezvous
+        timeout = timedelta(seconds=120)
+        time.sleep(5.0 + random.uniform(0.0, 2.0))
+    else:
+        # Normal timeout for cold start
+        timeout = timedelta(seconds=60)
+        # Small initial jitter to avoid simultaneous connect storms across ranks
+        time.sleep(random.uniform(0.0, 0.2))
+    
     max_init_attempts = 24
-    # Small initial jitter to avoid simultaneous connect storms across ranks
-    time.sleep(random.uniform(0.0, 0.2))
     for attempt in range(1, max_init_attempts + 1):
         try:
             emit(event="pg_init_attempt", attempt=attempt,

@@ -1,4 +1,2 @@
-event=boot local_rank=0 scenario=A pid=12672 torch_version=2.12.0+cu130 master_addr=localhost master_port=41935 gloo_ifname=lo elastic_restart_count=1 rank=0 world=4 generation=1 ts=1780172557.4216151
-event=pg_init_attempt attempt=1 init_method=env:// timeout_s=60.0 rank=0 world=4 generation=1 ts=1780172557.6107328
-event=pg_init_retry attempt=1 error=Gloo connectFullMesh failed with [/pytorch/third_party/gloo/gloo/transport/tcp/pair.cc:152] timed out connecting: SO_ERROR: Connection refused, remote=[127.0.0.1]:37258$0 wait_s=0.5272282585528869 base=0.5 jitter=0.027228258552886908 rank=0 world=4 generation=1 ts=1780172557.6244173
-event=pg_init_attempt attempt=2 init_method=env:// timeout_s=60.0 rank=0 world=4 generation=1 ts=1780172558.153114
+event=boot local_rank=0 scenario=A pid=17667 torch_version=2.12.0+cu130 master_addr=localhost master_port=39377 gloo_ifname=lo elastic_restart_count=1 rank=0 world=4 generation=1 ts=1780172886.3726046
+event=pg_init_attempt attempt=1 init_method=env:// timeout_s=120.0 rank=0 world=4 generation=1 ts=1780172891.6167316
