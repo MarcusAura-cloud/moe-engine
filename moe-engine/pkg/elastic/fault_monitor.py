@@ -41,6 +41,15 @@ import torch.distributed as dist
 
 from pkg.distributed.parallel_mesh import ParallelTopology, build_topology
 
+# Ensure sensible defaults for local/test runs: prefer loopback for Gloo
+# and enable NCCL async watchdogs. Setting these at module import guarantees
+# worker processes that simply `from pkg.elastic.fault_monitor import ...`
+# inherit the same robust defaults used by the harness.
+os.environ.setdefault("GLOO_SOCKET_IFNAME", "lo")
+os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+os.environ.setdefault("TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC", "30")
+os.environ.setdefault("TORCH_NCCL_TRACE_BUFFER_SIZE", "1048576")
+
 # Optional boto3 -- gracefully degrade if missing so local tests still run.
 try:
     import boto3                                                         # type: ignore
@@ -558,6 +567,9 @@ class ElasticTrainerHarness:
         os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
         os.environ.setdefault("TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC", "30")
         os.environ.setdefault("TORCH_NCCL_TRACE_BUFFER_SIZE", "1048576")
+        # Prefer loopback for local Gloo runs to avoid interface bind/connect
+        # races in containerized test environments.
+        os.environ.setdefault("GLOO_SOCKET_IFNAME", "lo")
 
         self.cfg = cfg
         self.topology = topology
@@ -581,7 +593,7 @@ class ElasticTrainerHarness:
             drop_grace_s=cfg.drop_grace_s,
             min_nodes=cfg.min_nodes,
         )
-        self.state.register_on_drop(self._on_rank_failure)
+        self.state.register_on_drop(self.state._on_rank_failure)
         self._signals_installed = False
 
     # ------------------------------------------------------------------

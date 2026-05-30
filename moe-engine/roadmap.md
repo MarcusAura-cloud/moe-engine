@@ -11,6 +11,10 @@
 - [❌] Chaos Scenario A: node kill + hot-resume — P0-3
 - [⚠️] Chaos Scenario B: storage stall — passing
 - [❌] Dead code removal (`if False` branches) — P0-2
+ - [✅] Triton backward kernel (`_router_bwd_kernel`) — P0-1
+ - [❌] Chaos Scenario A: node kill + hot-resume — P0-3
+ - [⚠️] Chaos Scenario B: storage stall — passing
+ - [✅] Dead code removal (`if False` branches) — P0-2
 
 ## v0.2 — Complete 4D Parallelism
 - [❌] Tensor Parallelism: ColumnParallel + RowParallel linear — P1-1
