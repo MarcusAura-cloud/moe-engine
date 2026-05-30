@@ -368,7 +368,7 @@ def _reference_route_fp64(
 # ==========================================================================
 # Autograd Function -- single entry-point used by `MoERouter`.
 # ==========================================================================
-class MoERouterAutograd(torch.autograd.Function):
+class MoERouterFunction(torch.autograd.Function):
     """Differentiable Top-K router.
 
     Forward chooses Triton on CUDA-capable devices, falls back to the
@@ -452,6 +452,9 @@ class MoERouterAutograd(torch.autograd.Function):
         grad_gate_w = tokens.t() @ grad_logits
 
         return grad_tokens, grad_gate_w, None, None
+
+
+MoERouterAutograd = MoERouterFunction
 
 
 def _reference_backward_fp64(
@@ -543,7 +546,7 @@ def moe_topk_route(
         flat = tokens
     else:
         raise ValueError(f"tokens must be rank 2 or 3, got {tokens.dim()}")
-    idx, w = MoERouterAutograd.apply(flat, gate_w, k, force_reference)
+    idx, w = MoERouterFunction.apply(flat, gate_w, k, force_reference)
     return idx, w
 
 
@@ -599,6 +602,7 @@ class MoERouter(torch.nn.Module):
             B = 1
             S = flat.shape[0]
             H = flat.shape[1]
+        N = flat.shape[0]
         assert H == self.hidden_dim
 
         gate_w = self.gate_w

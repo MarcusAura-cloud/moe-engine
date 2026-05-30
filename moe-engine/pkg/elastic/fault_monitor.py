@@ -485,6 +485,39 @@ class ClusterStateMachine:
     def mark_resumed(self) -> None:
         self.phase = self.PHASE_RESUMED
 
+    def _rebalance_experts(
+        self,
+        active_ranks: List[int],
+        mesh: Optional[DeviceMesh],
+        num_experts: int,
+    ) -> Dict[int, List[int]]:
+        """Evenly redistribute experts across surviving ranks.
+
+        Returns a mapping from surviving process rank -> assigned global
+        expert ids. Round-robin assignment is used to keep the distribution
+        balanced and deterministic.
+        """
+        active_ranks = sorted(active_ranks)
+        if not active_ranks:
+            return {}
+        assignment: Dict[int, List[int]] = {r: [] for r in active_ranks}
+        for expert_id in range(num_experts):
+            target_rank = active_ranks[expert_id % len(active_ranks)]
+            assignment[target_rank].append(expert_id)
+        return assignment
+
+    def _on_rank_failure(self, dead_ranks: List[int]) -> None:
+        active_ranks = self.alive_ranks()
+        log.warning(
+            "rank failure detected, dead=%s active=%s",
+            dead_ranks, active_ranks,
+        )
+        # Carrier: we do not have num_experts in this callback path, but
+        # the recovery flow will still invoke reshard on the surviving ranks.
+        # This callback is retained for future integration points where the
+        # harness can inject exact expert counts.
+        return
+
 
 # ==========================================================================
 # ElasticTrainerHarness – glues the pieces together.
@@ -522,6 +555,10 @@ class ElasticTrainerHarness:
     """
 
     def __init__(self, cfg: ElasticConfig, topology: ParallelTopology):
+        os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+        os.environ.setdefault("TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC", "30")
+        os.environ.setdefault("TORCH_NCCL_TRACE_BUFFER_SIZE", "1048576")
+
         self.cfg = cfg
         self.topology = topology
         self.local_adapter = LocalNVMeAdapter(cfg.local_ckpt_dir)
@@ -544,6 +581,7 @@ class ElasticTrainerHarness:
             drop_grace_s=cfg.drop_grace_s,
             min_nodes=cfg.min_nodes,
         )
+        self.state.register_on_drop(self._on_rank_failure)
         self._signals_installed = False
 
     # ------------------------------------------------------------------
@@ -618,6 +656,8 @@ class ElasticTrainerHarness:
         # checkpoint into a freshly constructed model whose ep layout matches
         # `new_topo`. The harness publishes the assignment so model factories
         # can read it.
+        active_ranks = self.state.alive_ranks()
+        _ = self.state._rebalance_experts(active_ranks, self.topology.mesh, num_experts)
         _ = self.state.reshard(new_topo, num_experts)
         latest = self.async_ckpt.latest_step()
         if latest is not None:

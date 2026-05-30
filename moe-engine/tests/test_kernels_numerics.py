@@ -17,7 +17,7 @@ import pytest
 import torch
 import numpy as np
 
-from pkg.kernels.moe_router import moe_topk_route
+from pkg.kernels.moe_router import moe_topk_route, TRITON_AVAILABLE
 
 
 def assert_close(a, b, atol=1e-5, rtol=1e-5, name=""):
@@ -202,6 +202,49 @@ class TestMoERouterNumerics:
             grad_gate_w_tri, grad_gate_w_ref,
             name="grad_gate_w", atol=1e-5, rtol=1e-5
         )
+
+    def test_backward_gradients_randomized_triton(self):
+        """Backward: Triton gradients match reference across randomized shapes."""
+        if not (TRITON_AVAILABLE and torch.cuda.is_available()):
+            pytest.skip("Triton GPU path not available for this test")
+
+        import random
+        dims = [64, 128, 256, 512]
+        experts = [8, 16, 32]
+        ks = [1, 2, 4]
+
+        for seed in range(50):
+            random.seed(seed)
+            H = random.choice(dims)
+            E = random.choice(experts)
+            K = random.choice(ks)
+            N = 32
+
+            torch.manual_seed(seed)
+            tokens = torch.randn(N, H, dtype=torch.float32, requires_grad=True, device="cuda")
+            gate_w = torch.randn(H, E, dtype=torch.float32, requires_grad=True, device="cuda")
+
+            idx_tri, w_tri = moe_topk_route(tokens, gate_w, K, force_reference=False)
+            loss_tri = w_tri.sum()
+            loss_tri.backward()
+
+            grad_tokens_tri = tokens.grad.clone().detach().cpu().double()
+            grad_gate_w_tri = gate_w.grad.clone().detach().cpu().double()
+
+            tokens_ref = tokens.detach().cpu().clone().requires_grad_(True)
+            gate_w_ref = gate_w.detach().cpu().clone().requires_grad_(True)
+            idx_ref, w_ref = moe_topk_route(tokens_ref, gate_w_ref, K, force_reference=True)
+            loss_ref = w_ref.sum()
+            loss_ref.backward()
+
+            assert_close(
+                grad_tokens_tri, tokens_ref.grad.clone().detach().double(),
+                name=f"grad_tokens_randomized_seed_{seed}", atol=1e-5, rtol=1e-5
+            )
+            assert_close(
+                grad_gate_w_tri, gate_w_ref.grad.clone().detach().double(),
+                name=f"grad_gate_w_randomized_seed_{seed}", atol=1e-5, rtol=1e-5
+            )
     
     # ────────────────────────────────────────────────────────────────────
     # TOKEN CONSERVATION INVARIANT TESTS
