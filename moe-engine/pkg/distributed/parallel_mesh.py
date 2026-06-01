@@ -410,6 +410,95 @@ class _SwiGLUExpert(nn.Module):
 
 
 # ==========================================================================
+# Sequence Parallelism Helpers
+# ==========================================================================
+def scatter_to_sequence_parallel(
+    x: torch.Tensor,        # [B, S, H]
+    topology: ParallelTopology,
+) -> torch.Tensor:
+    """Scatter activations across the TP group along the sequence dimension.
+    
+    For TP > 1, this prevents duplicating the full sequence on every rank,
+    enabling memory-efficient long-context training. Each TP rank gets a
+    contiguous slice of the sequence.
+    
+    Parameters
+    ----------
+    x : torch.Tensor
+        Activation tensor of shape [B, S, H]
+    topology : ParallelTopology
+        Mesh topology including TP group information
+    
+    Returns
+    -------
+    torch.Tensor
+        Scattered tensor of shape [B, S // tp_size, H] on each rank
+    """
+    if topology.tp_size <= 1 or not dist.is_initialized():
+        return x
+    
+    B, S, H = x.shape
+    assert S % topology.tp_size == 0, (
+        f"Sequence length {S} must be divisible by TP size {topology.tp_size}"
+    )
+    
+    tp_group = topology.mesh["tp"].get_group() if topology.mesh is not None else None
+    tp_rank = dist.get_rank(tp_group) if tp_group is not None else 0
+    
+    # Scatter: each rank gets a contiguous slice
+    S_local = S // topology.tp_size
+    x_scattered = x[:, tp_rank * S_local : (tp_rank + 1) * S_local, :]
+    return x_scattered
+
+
+def gather_from_sequence_parallel(
+    x: torch.Tensor,        # [B, S // tp_size, H]
+    topology: ParallelTopology,
+) -> torch.Tensor:
+    """Gather sequence-parallel shards back to the full sequence on every rank.
+    
+    Reverses the scatter_to_sequence_parallel operation. Each rank contributes
+    its sequence shard to reconstruct the full [B, S, H] tensor.
+    
+    Parameters
+    ----------
+    x : torch.Tensor
+        Scattered activation tensor of shape [B, S // tp_size, H]
+    topology : ParallelTopology
+        Mesh topology including TP group information
+    
+    Returns
+    -------
+    torch.Tensor
+        Gathered tensor of shape [B, S, H] on each rank
+    """
+    if topology.tp_size <= 1 or not dist.is_initialized():
+        return x
+    
+    B, S_local, H = x.shape
+    S = S_local * topology.tp_size
+    
+    tp_group = topology.mesh["tp"].get_group() if topology.mesh is not None else None
+    
+    # Allocate output buffer for full sequence
+    x_full = torch.empty(
+        (B, S, H), dtype=x.dtype, device=x.device,
+    )
+    
+    # Each rank scatters its shard into the global buffer
+    if tp_group is not None:
+        dist.all_gather(
+            [x_full[:, i * S_local : (i + 1) * S_local, :] for i in range(topology.tp_size)],
+            x,
+            group=tp_group,
+        )
+    else:
+        x_full = x
+    
+    return x_full
+
+
+# ==========================================================================
 # The headline DistributedMoELayer.
 # ==========================================================================
 class DistributedMoELayer(nn.Module):
